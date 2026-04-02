@@ -1,35 +1,66 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Mi Isla - Juego</title>
+    <title>Mi Isla - Recolectar Frutas</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
     <h1>🏝️ Mi Isla</h1>
-    <div id="info">Cargando tus datos...</div>
+    <div id="info">Cargando...</div>
+    <button id="recolectarBtn" disabled>Recolectar frutas (cada 6h)</button>
+    <div id="mensaje"></div>
 
     <script>
-        // Obtener la instancia de Telegram WebApp
         let tg = window.Telegram.WebApp;
         tg.ready();
-        tg.expand(); // Expande a pantalla completa
+        tg.expand();
 
-        // Datos del usuario que Telegram nos da
-        let user = tg.initDataUnsafe?.user;
-        
-        if (user) {
-            document.getElementById('info').innerHTML = `
-                <p>✅ Hola, <strong>${user.first_name} ${user.last_name || ''}</strong>!</p>
-                <p>🆔 Tu ID de Telegram: <code>${user.id}</code></p>
-                <p>👤 Usuario: @${user.username || 'sin username'}</p>
-                <hr>
-                <p>⚙️ Este es tu espacio. Pronto podrás alimentar criaturas.</p>
-            `;
+        const user = tg.initDataUnsafe?.user;
+        if (!user) {
+            document.getElementById('info').innerHTML = '❌ Error: No se pudo obtener usuario. Abre desde Telegram.';
         } else {
             document.getElementById('info').innerHTML = `
-                <p>⚠️ No se pudo obtener el usuario. Asegúrate de abrir esto desde Telegram.</p>
+                <p>✅ Hola <strong>${user.first_name}</strong> (ID: ${user.id})</p>
+                <p>🍎 Frutas recolectadas: <span id="frutasCount">?</span></p>
             `;
+            // Registrar usuario en el backend
+            const BACKEND_URL = 'https://mi-isla-backend.onrender.com'; // 👈 CAMBIA ESTO POR TU URL DE RENDER
+            fetch(`${BACKEND_URL}/api/user`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telegramId: user.id, nombre: user.first_name })
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('frutasCount').innerText = data.frutas;
+                document.getElementById('recolectarBtn').disabled = false;
+            })
+            .catch(err => {
+                document.getElementById('info').innerHTML += `<p>⚠️ Error conectando al backend: ${err.message}</p>`;
+            });
         }
+
+        // Evento del botón recolectar
+        document.getElementById('recolectarBtn').onclick = () => {
+            fetch(`${BACKEND_URL}/api/recolectar`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telegramId: user.id })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    const espera = data.ultimaRecoleccion ? new Date(data.ultimaRecoleccion).toLocaleTimeString() : 'nunca';
+                    document.getElementById('mensaje').innerHTML = `⏳ ${data.error}. Última vez: ${espera}`;
+                } else {
+                    document.getElementById('frutasCount').innerText = data.frutas;
+                    document.getElementById('mensaje').innerHTML = `🎉 +${data.ganancia} frutas! Ahora tienes ${data.frutas}`;
+                }
+            })
+            .catch(err => {
+                document.getElementById('mensaje').innerHTML = `❌ Error: ${err.message}`;
+            });
+        };
     </script>
 </body>
 </html>
